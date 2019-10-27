@@ -1,0 +1,5 @@
+letsencrypt/acme.json
+.env
+.vscode/
+.DS_Store
+logs/*.log

@@ -1,0 +1,75 @@
+version: "3.7"
+
+services:
+  traefik:
+    command:
+      - "--api=true"
+      - "--api.dashboard=false"
+      - "--providers.file=true"
+      - "--providers.file.filename=/etc/traefik/conf.yml"
+      - "--providers.file.watch=true"
+      - "--providers.docker=true"
+      - "--providers.docker.endpoint=unix:///var/run/docker.sock"
+      - "--providers.docker.network=reverse_proxy"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.swarmMode=false"
+      - "--entrypoints.http.address=:80"
+      - "--entrypoints.https.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpChallenge.entryPoint=http"
+      - "--certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/etc/traefik/acme/acme.json"
+      - "--log.filePath=/etc/traefik/logs/traefik.log"
+      - "--log.format=json"
+      - "--log.level=WARN"
+      - "--accesslog=true"
+      - "--accesslog.filepath=/etc/traefik/logs/access.log"
+      - "--api=true"
+      - "--api.dashboard=true"
+      - "--ping=true"
+      - "--ping.entryPoint=${TRAEFIK_DEFAULT_ENTRYPOINT}"
+      - "--global.sendanonymoususage=false"
+      - "--global.checknewversion=false"
+    container_name: ${TRAEFIK_CONTAINER_NAME}
+    image: ${TRAEFIK_IMAGE}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`${TRAEFIK_DOMAIN}`)"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.entrypoints=${TRAEFIK_DEFAULT_ENTRYPOINT}"
+      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik.middlewares=secured"
+      - "traefik.http.routers.ping.entrypoints=${TRAEFIK_DEFAULT_ENTRYPOINT}"
+      - "traefik.http.routers.ping.rule=Host(`${TRAEFIK_DOMAIN}`) && PathPrefix(`/ping`)"
+      - "traefik.http.routers.ping.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ping.middlewares=secured"
+      - "traefik.http.middlewares.secured.chain.middlewares=known-ips,auth"
+      - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_AUTH}"
+      - "traefik.http.middlewares.known-ips.ipwhitelist.sourceRange=${TRAEFIK_IPWHITELIST}"
+      - "traefik.http.middlewares.secureheaders.headers.browserXSSFilter=true"
+      - "traefik.http.middlewares.secureheaders.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.secureheaders.headers.forceSTSHeader=true"
+      - "traefik.http.middlewares.secureheaders.headers.frameDeny=true"
+      - "traefik.http.middlewares.secureheaders.headers.sslredirect=true"
+      - "traefik.http.middlewares.secureheaders.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.secureheaders.headers.stsPreload=true"
+      - "traefik.http.middlewares.secureheaders.headers.stsSeconds=315360000"
+    networks:
+      - reverse_proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    extra_hosts:
+      - "${TRAEFIK_DOMAIN}:127.0.0.1"
+    restart: unless-stopped
+    volumes:
+      - ./letsencrypt:/etc/traefik/acme
+      - ./logs:/etc/traefik/logs
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - ./conf/conf.yml:/etc/traefik/conf.yml
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+networks:
+  default:
+    driver: bridge
+  reverse_proxy:
+    external: true
